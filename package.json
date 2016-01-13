@@ -1,0 +1,14 @@
+{
+  "name": "mass-mailer",
+  "version": "1.0.0",
+  "description": "A tool for sending large email campaigns using transactional email services.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mandrill-api": "^1.0.45"
+  }
+}
