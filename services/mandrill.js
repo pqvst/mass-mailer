@@ -2,26 +2,30 @@
  * Created by Philip on 2016-01-13.
  */
 
-var config = require("../config");
 var api = require('mandrill-api/mandrill');
-var client = new mandrill.Mandrill(config.mandrill.apikey);
+var _ = require("lodash");
 
 
-var Mandrill = module.exports = {
+module.exports = function (config) {
+    var client = new api.Mandrill(config.mandrill.apikey);
+    return {
+        send: function (recipients, done) {
+            message = config.message;
+            message.to = _.map(recipients, recipient => ({
+                email: recipient._id
+            }));
 
-    send: function (message) {
+            function success(result) {
+                done(null, result);
+            }
+            function error(err) {
+                done(err);
+            }
 
-        var async = true;
-        var ip_pool;
-        var send_at;
-
-        var result = client.messages.send({
-            message: message,
-            async: async,
-            ip_pool: ip_pool,
-            send_at: send_at
-        });
-
-    }
-
+            client.messages.send({
+                message: message,
+                async: true
+            }, success, error);
+        }
+    };
 };

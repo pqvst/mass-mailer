@@ -9,6 +9,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "mandrill-api": "^1.0.45"
+    "async": "^1.5.2",
+    "lodash": "^4.0.0",
+    "mandrill-api": "^1.0.45",
+    "moment": "^2.11.1",
+    "nedb": "^1.6.0"
   }
 }
