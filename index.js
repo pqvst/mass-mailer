@@ -4,7 +4,8 @@
 
 var Mailer = require("./mailer");
 
-var mailer = new Mailer(require("./config"));
-mailer.send(err => {
-    console.log("err", err);
+var job = require("./example");
+Mailer.create("mandrill", job, (err, mailer) => {
+    mailer.start();
 });
+

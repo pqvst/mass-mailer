@@ -7,6 +7,7 @@ var path = require("path");
 var nedb = require("nedb");
 var moment = require("moment");
 var async = require("async");
+var later = require("later");
 var _ = require("lodash");
 
 
@@ -15,9 +16,20 @@ function log(s) {
 }
 
 
-var Mailer = function (config) {
-    this.config = config;
-    this.service = require("./services/" + config.service)(config);
+var Mailer = function () {};
+
+
+module.exports.create = function (service, job, done) {
+    var mailer = new Mailer();
+    mailer.create(service, job, err => {
+        done(err, mailer);
+    });
+};
+
+
+Mailer.prototype.create = function (service, job, done) {
+    this.job = job;
+    this.service = require("./services/" + service)(job);
 
     // ensure jobs directory exists
     var dir = "jobs";
@@ -27,7 +39,7 @@ var Mailer = function (config) {
     }
 
     // load job file (nedb)
-    var file = path.join(dir, config.name);
+    var file = path.join(dir, job.name);
     if (fs.existsSync(file))
         log("resuming existing job");
     else
@@ -35,58 +47,62 @@ var Mailer = function (config) {
 
     // open/create job file
     this.db = new nedb({ filename: file, autoload: true });
+
+    // sync recipients
+    var recps = job.recipients;
+    async.eachSeries(recps, (recp, done) => {
+        var doc = {
+            _id: recp.email,
+            vars: recp.vars,
+            sent: null
+        };
+        this.db.insert(doc, err => {
+            if (err && err.errorType == "uniqueViolated") return done();
+            done();
+        });
+    }, err => done(err));
+};
+
+
+Mailer.prototype.start = function () {
+    var self = this;
+    var job = this.job;
+    var sched = later.parse.text(job.schedule);
+
+    function loop() {
+        console.log("next", later.schedule(sched).next());
+        self.timer = later.setTimeout(function () {
+            var startTime = Date.now();
+            self.send(err => {
+                var endTime = Date.now();
+                var diff = (endTime - startTime) / 1000;
+
+                if (err) console.log(err);
+
+                var throughput = Math.round(job.batch / diff * 3600);
+                console.log("max throughput:", throughput, "per hour");
+
+                loop();
+            });
+        }, sched);
+    }
+
+    loop();
+
+};
+
+
+Mailer.prototype.stop = function () {
+    this.timer.clear();
 };
 
 
 Mailer.prototype.send = function (done) {
     var self = this;
     var db = this.db;
-    var recps = this.config.recipients;
-
-    async.waterfall([
-
-        // sync recipients
-        function (done) {
-            async.eachSeries(recps, (recp, done) => {
-                var doc = {
-                    _id: recp.email,
-                    vars: recp.vars,
-                    sent: null
-                };
-                db.insert(doc, err => {
-                    if (err && err.errorType == "uniqueViolated") return done();
-                    done();
-                });
-            }, err => done(err));
-        },
-
-        function (done) {
-            async.forever(
-                function (next) {
-                    self.sendBatch(err => {
-                       next(err);
-                    });
-                },
-                function (err) {
-                    if (err === "break") err = null;
-                    self.done(err);
-                }
-            );
-        }
-
-    ], err => {
-        log(err);
-    });
-
-};
-
-
-Mailer.prototype.sendBatch = function (done) {
-    var self = this;
-    var db = this.db;
     var service = this.service;
-    var batch = this.config.batch;
-    var interval = this.config.interval;
+    var batch = this.job.batch;
+    var interval = this.job.interval;
 
     async.waterfall([
 
@@ -101,29 +117,6 @@ Mailer.prototype.sendBatch = function (done) {
                     done("break");
                 }
             });
-        },
-
-        // determine last sent
-        function (done) {
-            db.findOne({ sent: {$ne:null} }).sort({ sent: -1 }).exec((err, doc) => {
-                if (!doc) return done();
-
-                var next = moment(doc.sent).add(1, interval).startOf(interval);
-                var now = moment();
-                var secs = next.diff(now, "seconds");
-                done(null, secs);
-            });
-        },
-
-        // waited required time
-        function (secs, done) {
-            if (secs > 0) {
-                log("waiting " + secs + " seconds...");
-                setTimeout(done, secs * 1000);
-            } else {
-                log("running now");
-                done();
-            }
         },
 
         // get batch of recipients
@@ -154,5 +147,3 @@ Mailer.prototype.sendBatch = function (done) {
     });
 };
 
-
-module.exports = Mailer;

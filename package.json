@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "async": "^1.5.2",
+    "later": "^1.2.0",
     "lodash": "^4.0.0",
     "mandrill-api": "^1.0.45",
     "moment": "^2.11.1",
